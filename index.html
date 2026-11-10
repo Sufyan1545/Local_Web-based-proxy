@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proxy</title>
+<style>
+:root{--bar:#1b2430;--field:#0f141b;--ink:#e8edf2;--dim:#8a98a8;--go:#3ddc97;--top:52px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0f141b;font-family:system-ui,sans-serif;color:var(--ink)}
+body.hide{--top:0px}
+#bar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;gap:6px;padding:7px;background:var(--bar);z-index:10;transition:transform .2s}
+body.hide #bar{transform:translateY(-100%)}
+#u{flex:1;min-width:0;padding:0 12px;border:1px solid #2c3948;border-radius:8px;background:var(--field);color:var(--ink);font-size:16px}
+#u:focus{outline:2px solid var(--go);outline-offset:-1px}
+#g{border:0;border-radius:8px;padding:0 18px;background:var(--go);color:#06281a;font-size:16px;font-weight:600}
+#h{border:0;border-radius:8px;padding:0 12px;background:#2c3948;color:var(--ink);font-size:18px}
+#t{position:fixed;top:var(--top);left:50%;transform:translateX(-50%);z-index:11;height:22px;padding:0 22px;border:0;border-radius:0 0 10px 10px;background:var(--bar);color:var(--ink);font-size:12px;opacity:.9;transition:top .2s}
+#f{position:fixed;top:var(--top);left:0;width:100%;height:calc(100% - var(--top));border:0;background:#fff;transition:top .2s,height .2s}
+#home{position:fixed;top:var(--top);left:0;width:100%;height:calc(100% - var(--top));display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px}
+#home h1{margin:0;font-size:28px;font-weight:600}
+#home p{margin:0;color:var(--dim);font-size:15px}
+#home .by{margin-top:18px;color:var(--ink);font-size:14px}
+body.empty #home{display:flex}
+body.empty #f{display:none}
+#m{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:12;max-width:90%;padding:8px 14px;border-radius:8px;background:#5a1f26;color:#fff;font-size:14px;display:none}
+</style>
+</head>
+<body class="empty">
+<div id="bar">
+  <button id="h" aria-label="الرئيسية">⌂</button>
+  <input id="u" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="رابط أو كلمة بحث">
+  <button id="g">Go</button>
+</div>
+<button id="t" aria-label="إخفاء أو إظهار الشريط">▲</button>
+<div id="home">
+  <h1>Proxy</h1>
+  <p>اكتب رابطاً أو كلمة بحث في الشريط بالأعلى</p>
+  <p class="by">Created by Sufyan with Claude</p>
+</div>
+<div id="m"></div>
+<iframe id="f" allow="fullscreen; autoplay; clipboard-write; encrypted-media" allowfullscreen></iframe>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var f=$('f'),u=$('u'),t=$('t'),m=$('m');
+  var sid=localStorage.getItem('sid')||'';
+  var current=localStorage.getItem('last')||'';
+  var ready=null;
+
+  function say(msg){m.textContent=msg;m.style.display=msg?'block':'none';}
+  function api(p){
+    return fetch(p).then(function(r){return r.text()}).then(function(x){return x.trim()});
+  }
+  function ensure(){
+    if(ready) return ready;
+    var check=sid?api('/sessionexists?id='+encodeURIComponent(sid)):Promise.resolve('not found');
+    ready=check.then(function(x){
+      if(x==='exists') return;
+      return api('/newsession').then(function(id){
+        sid=id; localStorage.setItem('sid',id);
+      });
+    }).then(function(){
+      // URL shuffling off so the address bar shows plain links
+      return api('/editsession?id='+encodeURIComponent(sid)+'&enableShuffling=0');
+    }).catch(function(e){
+      ready=null; throw e;
+    });
+    return ready;
+  }
+  function norm(v){
+    v=v.trim();
+    if(!v) return '';
+    if(/^https?:\/\//i.test(v)) return v;
+    if(!/\s/.test(v) && /\.[a-z]{2,}(\/|$|:|\?|#)/i.test(v)) return 'https://'+v;
+    return 'https://duckduckgo.com/html/?q='+encodeURIComponent(v);
+  }
+  function openUrl(v){
+    v=norm(v);
+    if(!v) return;
+    say('');
+    document.body.classList.remove('empty');
+    u.value=v; current=v; localStorage.setItem('last',v);
+    ensure().then(function(){
+      f.src='/'+sid+'/'+v;
+    }).catch(function(){
+      say('تعذر الاتصال بالخادم. تأكد أن Termux يعمل.');
+    });
+  }
+  function goHome(){
+    f.src='about:blank';
+    current=''; u.value='';
+    localStorage.removeItem('last');
+    document.body.classList.add('empty');
+  }
+  function sync(){
+    if(document.body.classList.contains('empty')) return;
+    try{
+      var h=f.contentWindow.location.href, k='/'+sid+'/', i=h.indexOf(k);
+      if(i<0) return;
+      var real=h.slice(i+k.length);
+      if(/^https?:\/\//i.test(real) && real!==current){
+        current=real; localStorage.setItem('last',real);
+        if(document.activeElement!==u) u.value=real;
+      }
+    }catch(e){}
+  }
+
+  $('g').onclick=function(){openUrl(u.value)};
+  $('h').onclick=goHome;
+  u.addEventListener('keydown',function(e){if(e.key==='Enter'){u.blur();openUrl(u.value);}});
+  u.addEventListener('focus',function(){u.select();});
+  t.onclick=function(){
+    var hidden=document.body.classList.toggle('hide');
+    t.textContent=hidden?'▼':'▲';
+  };
+  f.addEventListener('load',sync);
+  setInterval(sync,1000);
+
+  if(current){u.value=current; openUrl(current);}
+})();
+</script>
+</body>
+</html>
