@@ -37,7 +37,7 @@ module.exports = {
     password: null,
 
     // disable or enable localStorage sync (turn off if clients send over huge localStorage data, resulting in huge memory usages)
-    disableLocalStorageSync: true,
+    disableLocalStorageSync: false,
 
     // restrict sessions to be only used per IP
     restrictSessionToIP: false,
@@ -46,80 +46,3 @@ module.exports = {
     // recommended: 50mb for memory, 5gb for disk
     // jsCache: new RammerheadJSMemCache(5 * 1024 * 1024),
     jsCache: new RammerheadJSFileCache(path.join(__dirname, '../cache-js'), 5 * 1024 * 1024 * 1024, 50000, enableWorkers),
-
-    // whether to disable http2 support or not (from proxy to destination site).
-    // disabling may reduce number of errors/memory, but also risk
-    // removing support for picky sites like web.whatsapp.com that want
-    // the client to connect to http2 before connecting to their websocket
-    disableHttp2: true,
-
-    // configure timeouts for page/xhr requests.
-    // useful if a destination site is slow and you are getting the following message
-    // "Failed to complete a request to ... within the timeout period. The problem may be related to a..."
-    requestTimeoutAjax: 2 * 60 * 1000,
-    requestTimeoutPage: 25 * 1000,
-    // answer 504 and log requests that haven't started responding after this long
-    stuckRequestTimeout: 3 * 60 * 1000,
-
-    /// CLOUDFLARE JS CHALLENGE BYPASS CONFIGURATION
-
-    cloudflareSolver: null,
-    // cloudflareSolver: new RammerheadCloudflare2Captcha({
-    //     apiKey: 'YOUR_2CAPTCHA_API_KEY',
-
-    //     disableProxy: true // you can disable the socks5 proxy, but it's here just in case cloudflare needs it
-
-    // // note: you don't need the following options if you set disableProxy to true
-    // // this must be your public VPS's IP. If your routing setup is complicated, see the
-    // // documentation in RammerheadCloudflareGenericSolver.js for more details
-    //     proxyBindAddress: 'YOUR_PUBLIC_SERVER_IP', // in the form of 12.34.56.78
-    //     proxyPort: 8890, // you can use any port here
-
-    // }),
-
-    //// REWRITE HEADER CONFIGURATION ////
-
-    // removes reverse proxy headers
-    // cloudflare example:
-    // stripClientHeaders: ['cf-ipcountry', 'cf-ray', 'x-forwarded-proto', 'cf-visitor', 'cf-connecting-ip', 'cdn-loop', 'x-forwarded-for'],
-    stripClientHeaders: [],
-    // if you want to modify response headers, like removing the x-frame-options header, do it like so:
-    // rewriteServerHeaders: {
-    //     // you can also specify a function to modify/add the header using the original value (undefined if adding the header)
-    //     // 'x-frame-options': (originalHeaderValue) => '',
-    //     'x-frame-options': null, // set to null to tell rammerhead that you want to delete it
-    // },
-    rewriteServerHeaders: { 'x-frame-options': null },
-
-    //// SESSION STORE CONFIG ////
-
-    // see src/classes/RammerheadSessionFileCache.js for more details and options
-    fileCacheSessionConfig: {
-        saveDirectory: path.join(__dirname, '../sessions'),
-        cacheTimeout: 1000 * 60 * 20, // 20 minutes
-        cacheCheckInterval: 1000 * 60 * 10, // 10 minutes
-        deleteUnused: true,
-        staleCleanupOptions: {
-            staleTimeout: 1000 * 60 * 60 * 24 * 365, // 1 year
-            maxToLive: null,
-            staleCheckInterval: 1000 * 60 * 60 * 6 // 6 hours
-        },
-        // corrupted session files happens when nodejs exits abruptly while serializing the JSON sessions to disk
-        deleteCorruptedSessions: true,
-    },
-
-    //// LOGGING CONFIGURATION ////
-
-    // valid values: 'disabled', 'debug', 'traffic', 'info', 'warn', 'error'
-    logLevel: process.env.DEVELOPMENT ? 'debug' : 'info',
-    generatePrefix: (level) => `[${new Date().toISOString()}] [${level.toUpperCase()}] `,
-
-    // logger depends on this value
-    getIP: (req) => req.socket.remoteAddress
-    // use the example below if rammerhead is sitting behind a reverse proxy like nginx
-    // getIP: req => (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '').split(',')[0].trim()
-};
-
-// RH_CONFIG overrides ../config.js (used by tests)
-const overridePath = process.env.RH_CONFIG ? path.resolve(process.env.RH_CONFIG) : path.join(__dirname, '../config.js');
-if (fs.existsSync(overridePath)) Object.assign(module.exports, require(overridePath));
