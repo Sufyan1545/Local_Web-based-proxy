@@ -38,6 +38,9 @@ body.gridmode #cnt{display:block}
 .pane.on{display:block}
 .fr{position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#fff}
 .chead,.cover,.ph{display:none}
+.ov{position:absolute;left:0;top:0;width:100%;height:0;border:0;background:#000;z-index:3;display:none}
+.ov.show{display:block}
+#frames.grid .ov{display:none!important}
 
 /* tab cards (squares) */
 #frames.grid{overflow-y:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px;align-content:start;background:#0f141b}
@@ -80,7 +83,7 @@ body.empty:not(.gridmode) #home{display:flex}
 <div id="home">
   <h1>Proxy</h1>
   <p>اكتب رابطاً أو كلمة بحث في الشريط بالأعلى</p>
-  <p class="by">Created by Sufyan with Claude · v5</p>
+  <p class="by">Created by Sufyan with Claude · v7</p>
 </div>
 <div id="m"></div>
 <div id="frames"></div>
@@ -89,7 +92,7 @@ body.empty:not(.gridmode) #home{display:flex}
   var $=function(i){return document.getElementById(i)};
   var u=$('u'),t=$('t'),m=$('m'),tl=$('tl'),fr=$('frames'),cnt=$('cnt'),vm=$('vm');
   var sid=localStorage.getItem('sid')||'';
-  var ready=null, frames={}, panes={}, state=null;
+  var ready=null, frames={}, panes={}, ovs={}, state=null;
   var view=localStorage.getItem('view')==='grid'?'grid':'strip';
   var HEAD=34, MAXPREVIEW=8;
 
@@ -148,9 +151,62 @@ body.empty:not(.gridmode) #home{display:flex}
       return /^[\w-]{11}$/.test(id)?id:'';
     }catch(e){return '';}
   }
+  var ytUp=null, ytCheckedAt=0;
+  function ytAvailable(){
+    var now=Date.now();
+    if(ytUp===true||(ytUp===false&&now-ytCheckedAt<30000)) return Promise.resolve(ytUp);
+    return new Promise(function(res){
+      var done=false;
+      function fin(v){if(done)return; done=true; clearTimeout(to); ytUp=v; ytCheckedAt=Date.now(); res(v);}
+      var to=setTimeout(function(){fin(false);},2500);
+      fetch(ytBase+'/',{mode:'no-cors'}).then(function(){fin(true);}).catch(function(){fin(false);});
+    });
+  }
   function srcFor(tb){
-    var id=ytId(tb.url);
-    return id?ytBase+'/watch?v='+id:'/'+sid+'/'+tb.url;
+    return '/'+sid+'/'+tb.url;
+  }
+
+  /* ---- YouTube: our player is laid exactly over YouTube's own (broken) player area ---- */
+  function playerRect(f){
+    try{
+      var d=f.contentDocument; if(!d) return null;
+      var e=d.querySelector('.html5-video-player')||d.querySelector('#player-container-id')||d.querySelector('video');
+      if(!e) return null;
+      var r=e.getBoundingClientRect();
+      if(r.width<100||r.height<60) return null;
+      return {l:r.left,t:r.top,w:r.width,h:r.height};
+    }catch(x){return null;}
+  }
+  function quiet(f){
+    try{
+      var vs=f.contentDocument.getElementsByTagName('video');
+      for(var i=0;i<vs.length;i++){ if(!vs[i].paused) vs[i].pause(); vs[i].muted=true; }
+    }catch(x){}
+  }
+  function ytOverlay(tb){
+    var p=panes[tb.id], f=frames[tb.id]; if(!p||!f) return;
+    var id=ytId(tb.url), o=ovs[tb.id];
+    if(!id||ytUp===false){ if(o){o.remove();delete ovs[tb.id];} return; }
+    if(!o){
+      o=el('iframe','ov');
+      o.setAttribute('allow','fullscreen; autoplay; encrypted-media');
+      o.setAttribute('allowfullscreen','');
+      p.insertBefore(o,p._head);
+      ovs[tb.id]=o;
+    }
+    if(o._vid!==id){ o._vid=id; o.src=ytBase+'/watch?v='+id+'&embed=1'; }
+  }
+  function track(){
+    var W=document.documentElement.clientWidth;
+    state.tabs.forEach(function(tb){
+      var o=ovs[tb.id], f=frames[tb.id]; if(!o||!f) return;
+      quiet(f);
+      if(view==='grid'||tb.id!==state.active) return;
+      var r=playerRect(f), s=o.style;
+      if(r){s.left=r.l+'px';s.top=r.t+'px';s.width=r.w+'px';s.height=r.h+'px';}
+      else{s.left='0px';s.top='0px';s.width='100%';s.height=Math.round(W*9/16)+'px';}
+      o.classList.add('show');
+    });
   }
 
   /* ---- panes: one per tab (holds the page, and is the card in squares view) ---- */
@@ -210,9 +266,16 @@ body.empty:not(.gridmode) #home{display:flex}
     return f;
   }
   function load(tb){
+    var id=ytId(tb.url);
     ensure().then(function(){
       var f=frames[tb.id]||mk(tb);
       f.src=srcFor(tb);
+      if(id) ytAvailable().then(function(up){
+        if(!up){
+          say('مشغّل يوتيوب غير شغّال، فتحت الفيديو عبر البروكسي العادي. شغّل ~/start-proxy.sh بعد bash update.sh');
+          setTimeout(function(){say('');},9000);
+        } else { state.tabs.forEach(ytOverlay); }
+      });
     }).catch(function(){say('تعذر الاتصال بالخادم. تأكد أن Termux يعمل.');});
   }
 
@@ -271,6 +334,7 @@ body.empty:not(.gridmode) #home{display:flex}
     state.tabs.forEach(function(tb,i){if(tb.id===id) idx=i;});
     if(idx<0) return;
     if(frames[id]) delete frames[id];
+    if(ovs[id]) delete ovs[id];
     if(panes[id]){panes[id].remove();delete panes[id];}
     state.tabs.splice(idx,1);
     if(!state.tabs.length) state.tabs.push(newTab(''));
@@ -281,7 +345,6 @@ body.empty:not(.gridmode) #home{display:flex}
     v=norm(v); if(!v) return;
     var tb=cur(); say('');
     if(view==='grid') setView('strip');
-    if(ytId(v)&&!ytId(tb.url)) tb.back=tb.url;
     tb.url=v; tb.title=''; u.value=v;
     if(frames[tb.id]) load(tb);
     show();
@@ -294,18 +357,14 @@ body.empty:not(.gridmode) #home{display:flex}
     catch(e){f.src=srcFor(tb);}
   }
   function sync(){
-    var ch=false, flips=[];
+    var ch=false;
     state.tabs.forEach(function(tb){
       var f=frames[tb.id]; if(!f) return;
       try{
         var h=f.contentWindow.location.href, k='/'+sid+'/', i=h.indexOf(k);
         if(i>-1){
           var real=h.slice(i+k.length);
-          if(/^https?:\/\//i.test(real)&&real!==tb.url){
-            if(ytId(real)){ if(!ytId(tb.url)) tb.back=tb.url; tb.url=real; tb.title=''; flips.push(tb); }
-            else tb.url=real;
-            ch=true;
-          }
+          if(/^https?:\/\//i.test(real)&&real!==tb.url){tb.url=real;ch=true;}
         }
         var ti=f.contentDocument&&f.contentDocument.title;
         if(ti&&ti!==tb.title){tb.title=ti;ch=true;}
@@ -315,7 +374,7 @@ body.empty:not(.gridmode) #home{display:flex}
       save(); render();
       if(document.activeElement!==u) u.value=cur().url;
     }
-    flips.forEach(function(tb){load(tb);});
+    state.tabs.forEach(ytOverlay);
   }
 
   $('g').onclick=function(){openUrl(u.value);};
@@ -330,16 +389,9 @@ body.empty:not(.gridmode) #home{display:flex}
     if(view==='grid') layoutGrid();
   };
   window.addEventListener('resize',function(){if(view==='grid') layoutGrid();});
-  window.addEventListener('message',function(e){
-    var d=e.data;
-    if(!d||typeof d!=='object'||!d.yt||e.origin!==ytBase) return;
-    var tb=null;
-    state.tabs.forEach(function(x){var f=frames[x.id]; if(f&&f.contentWindow===e.source) tb=x;});
-    if(!tb) return;
-    if(d.yt==='title'&&typeof d.title==='string'){tb.title=d.title.slice(0,80);save();render();}
-    if(d.yt==='back'){tb.url=tb.back||'https://m.youtube.com/';tb.back='';tb.title='';load(tb);show();}
-  });
   setInterval(sync,1000);
+  setInterval(track,100);
+  ytAvailable();
   setView(view);
   show();
 })();
