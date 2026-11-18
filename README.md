@@ -20,7 +20,7 @@ Created by Sufyan with Claude.
   - **Squares**: cards with a live preview of each page, like Chrome's tab switcher. Tap a card to open it.
 - **⟳** reload button, **+** new tab, **▲ / ▼** to hide or show the top bar.
 - **Saved sessions**: cookies and logins are kept on the phone for a year, so you stay signed in after the phone sleeps or the server restarts.
-- **YouTube player**: YouTube's own player is cut off after about a minute behind a rewriting proxy, so opening a video switches to a built-in player powered by `yt-dlp` (usually 360p). The "رجوع" button returns to the page you came from.
+- **YouTube player**: YouTube's own player is cut off after about a minute behind a rewriting proxy. So on a YouTube video page, the normal YouTube page stays (description, **suggestions, comments**, everything below) and a built-in player powered by `yt-dlp` is placed **at the top, exactly over YouTube's own player area**. Tap a suggested video and the player switches to it. The player has a **quality menu** (from 144p up to what the video offers, 1080p and more), **speed** (0.5x to 2x) and **fullscreen**, all behind the ⚙ button at its top-right corner, and it **remembers your quality and where you stopped**. Fullscreen fills the screen until you leave it.
 - No password and no "create session" step.
 
 ### Requirements
@@ -125,8 +125,8 @@ Settings live in `src__config.js` (it replaces Rammerhead's `src/config.js`). Ed
 | `restrictSessionToIP` | `false` | Allows a saved session to be used even if the device address changes. |
 | `staleTimeout` | 1 year | How long unused sessions (and logins) are kept. |
 | `workers` | `2` | Fixed worker count (Termux can report zero CPUs). |
-| `disableHttp2` | `true` | More stable video streaming. |
-| `disableLocalStorageSync` | `true` | Less traffic from sites that write to local storage constantly. |
+| `disableHttp2` | `false` | Keep it `false`: picky sites such as WhatsApp Web need HTTP/2, and turning it off makes them load forever. |
+| `disableLocalStorageSync` | `false` | Keep it `false`: it saves each site's local storage in the session. Turning it off can break heavy sites such as YouTube. |
 
 To pin the upstream Rammerhead version, put a commit hash in `RH_COMMIT` at the top of `setup.sh`.
 
@@ -136,12 +136,16 @@ To pin the upstream Rammerhead version, put a commit hash in `RH_COMMIT` at the 
 |---|---|
 | `CANNOT LINK EXECUTABLE "node"` / `libicu` error | `pkg upgrade -y && pkg reinstall libicu nodejs-lts`. Use Termux from F-Droid. |
 | `FAIL: ...` at the end of `setup.sh` | The GitHub files are old or missing. Make sure all files of this repo are uploaded, then `bash update.sh`. |
-| You see Rammerhead's original page, not this one | Run `bash update.sh`, restart with `~/start-proxy.sh`, open the page in a private window. The home screen should show `v5`. |
+| You see Rammerhead's original page, not this one | Run `bash update.sh`, restart with `~/start-proxy.sh`, open the page in a private window. The home screen should show `v7`. |
 | `Cannot read properties of undefined (reading 'process')` | The worker count. This repo's config already sets `workers: 2`, so update. |
 | `Sessions must come from the same IP` | Already disabled by this config. Update and open the page in a private window to create a new session. |
 | Page cannot be opened from another device | Check both devices are on the same Wi-Fi, use the phone's current IP, and make sure the proxy is running. Some routers block device-to-device traffic ("AP isolation"). |
 | Google rejects sign-in ("browser not secure") | Expected: Google blocks sign-in through any rewriting proxy. Browse without signing in, or use another method. |
+| On a YouTube page the player box is black or in the wrong place | Open the page in a private window and wait a second. The player is laid over YouTube's own player area, found by looking inside the page. If YouTube changes its page the position falls back to a 16:9 block at the top. |
+| YouTube video stutters, or sound and picture drift apart | 360p is a single file and the most reliable. Higher qualities load picture and sound separately and keep them in sync in the page, which a slow phone or network can struggle with. Pick a lower quality in the player's quality menu. |
+| No volume slider in the player on higher qualities | The picture stream has no sound track, so the browser hides the slider. Use the device's volume buttons. |
 | YouTube shows an error or does not play | The built-in player needs `yt-dlp`. Run `pip install -U yt-dlp yt-dlp-ejs` and start again. The player shows the error text in red, which tells you what failed. |
+| WhatsApp Web or game sites load forever, or YouTube shows a blank page | Check `src/config.js`: `disableHttp2` and `disableLocalStorageSync` must both be `false`. Run `bash update.sh` to restore them. |
 | Port already in use | Run `~/stop-proxy.sh`, then start again. |
 | Tabs disappeared | The browser's site data was cleared. Tabs are stored there. |
 
@@ -186,7 +190,7 @@ To customize another Rammerhead file, add a file with the same naming rule and r
 - عرضان للتبويبات بزر **▦ / ▭** أسفل البحث: **مستطيلات** (شريط تبويبات) أو **مربعات** (بطاقات فيها معاينة حية لكل صفحة مثل Chrome، واضغط البطاقة لفتحها).
 - زر إعادة التحميل ⟳، وزر + لتبويب جديد، وزر ▲ / ▼ لإخفاء الشريط.
 - **جلسات محفوظة**: الكوكيز وتسجيلات الدخول تبقى على الهاتف سنة.
-- **مشغّل يوتيوب مدمج** (بأداة yt-dlp) لأن مشغّل يوتيوب الأصلي ينقطع بعد دقيقة خلف أي بروكسي من هذا النوع. الجودة غالباً 360p.
+- **مشغّل يوتيوب مدمج** (بأداة yt-dlp) لأن مشغّل يوتيوب الأصلي ينقطع بعد دقيقة خلف أي بروكسي من هذا النوع. تبقى صفحة يوتيوب العادية (الوصف و**الاقتراحات والتعليقات** وكل ما تحت الفيديو)، ويوضع المشغّل المدمج **في الأعلى فوق مكان مشغّل يوتيوب مباشرة**. اضغط على فيديو مقترح فيتبدّل المشغّل إليه. وفي المشغّل **قائمة جودة** (من 144p حتى أعلى ما يوفره الفيديو، مثل 1080p) و**سرعة** التشغيل (0.5x إلى 2x) و**ملء الشاشة**، كلها خلف زر ⚙ في زاويته العليا، ويتذكر الجودة التي اخترتها ومكان توقفك.
 - بدون كلمة سر وبدون خطوة "إنشاء جلسة".
 
 ### المتطلبات
@@ -256,9 +260,13 @@ bash uninstall.sh
 
 - **خطأ `CANNOT LINK EXECUTABLE "node"`:** نفّذ `pkg upgrade -y && pkg reinstall libicu nodejs-lts` واستخدم Termux من F-Droid.
 - **ظهرت كلمة `FAIL` في آخر `setup.sh`:** ملفات GitHub قديمة أو ناقصة. تأكد من رفع كل ملفات المشروع ثم `bash update.sh`.
-- **ظهرت صفحة Rammerhead الأصلية:** نفّذ `bash update.sh` وأعد التشغيل وافتح الصفحة في نافذة خاصة، وفي الصفحة الرئيسية يجب أن ترى `v5`.
+- **ظهرت صفحة Rammerhead الأصلية:** نفّذ `bash update.sh` وأعد التشغيل وافتح الصفحة في نافذة خاصة، وفي الصفحة الرئيسية يجب أن ترى `v7`.
 - **الصفحة لا تفتح من جهاز آخر:** تأكد أن الجهازين على نفس الواي فاي، وأن الـ IP هو الحالي للهاتف، وأن البروكسي يعمل. بعض الراوترات تمنع التواصل بين الأجهزة (AP isolation).
+- **مربع المشغّل أسود أو في مكان غير صحيح في صفحة يوتيوب:** افتح الصفحة في نافذة خاصة وانتظر ثانية. المشغّل يوضع فوق مكان مشغّل يوتيوب الذي يُكتشف من داخل الصفحة، ولو غيّر يوتيوب صفحته يعود لمكان احتياطي (مربع 16:9 في الأعلى).
+- **فيديو يوتيوب يتقطع أو الصوت متأخر عن الصورة:** جودة 360p ملف واحد وأكثر ثباتاً. الجودات الأعلى تحمّل الصورة والصوت منفصلين وتزامنهما الصفحة، وقد يصعب ذلك على هاتف أو شبكة بطيئة، فاختر جودة أقل من قائمة الجودة.
+- **لا يظهر شريط الصوت في المشغّل مع الجودات العالية:** تيار الصورة بلا صوت فيخفي المتصفح الشريط، فاستخدم أزرار صوت الجهاز.
 - **يوتيوب لا يشتغل:** نفّذ `pip install -U yt-dlp yt-dlp-ejs` وشغّل من جديد. ويعرض المشغّل نص الخطأ بالأحمر ليوضح السبب.
+- **واتساب ويب أو مواقع الألعاب تحمّل بلا نهاية، أو يوتيوب صفحة بيضاء:** تأكد في `src/config.js` أن `disableHttp2` و`disableLocalStorageSync` كلاهما `false`، أو نفّذ `bash update.sh` لإرجاعهما.
 - **المنفذ مستخدم:** نفّذ `~/stop-proxy.sh` ثم شغّل من جديد.
 - **اختفت التبويبات:** غالباً تم مسح بيانات الموقع في المتصفح.
 
